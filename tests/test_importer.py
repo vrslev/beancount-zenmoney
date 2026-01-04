@@ -304,3 +304,133 @@ class TestZenMoneyImporterEdgeCases:
         assert len(transactions) == 1
         accounts = {p.account for p in transactions[0].postings}
         assert "Assets:Unknown" in accounts
+
+
+class TestCurrencyExchange:
+    """Tests for currency exchange handling."""
+
+    def test_currency_exchange_has_price_annotation(self, sample_csv_path: str, account_map: dict[str, str]) -> None:
+        """Test that currency exchange transactions have price annotations."""
+        importer = ZenMoneyImporter(account_map=account_map)
+        entries = importer.extract(sample_csv_path, existing=[])
+        transactions = [e for e in entries if isinstance(e, Transaction)]
+
+        # Find the currency exchange (4250 PLN -> 1000 EUR on 2025-12-12)
+        fx_txn = next(
+            (t for t in transactions if t.date == date(2025, 12, 12)),
+            None,
+        )
+        assert fx_txn is not None
+
+        # Find the EUR posting - it should have a price
+        eur_posting = next(
+            (p for p in fx_txn.postings if p.units and p.units.currency == "EUR"),
+            None,
+        )
+        assert eur_posting is not None
+        assert eur_posting.price is not None
+        assert eur_posting.price.currency == "PLN"
+        # 4250 PLN / 1000 EUR = 4.25 PLN per EUR
+        assert eur_posting.price.number == Decimal("4.25")
+
+
+class TestDateMethod:
+    """Tests for the date() method."""
+
+    def test_date_returns_latest_transaction_date(self, sample_csv_path: str, account_map: dict[str, str]) -> None:
+        """Test that date() returns the latest transaction date from file."""
+        importer = ZenMoneyImporter(account_map=account_map)
+        file_date = importer.date(sample_csv_path)
+        # The test CSV has transactions from 2025-11-29 to 2025-12-15
+        assert file_date == date(2025, 12, 15)
+
+    def test_date_returns_none_for_empty_file(self, tmp_path: Path, account_map: dict[str, str]) -> None:
+        """Test that date() returns None for file with no transactions."""
+        csv_file = tmp_path / "empty.csv"
+        csv_file.write_text(
+            "date;categoryName;payee;comment;outcomeAccountName;outcome;"
+            "outcomeCurrencyShortTitle;incomeAccountName;income;"
+            "incomeCurrencyShortTitle;createdDate;changedDate;qrCode\n"
+        )
+        importer = ZenMoneyImporter(account_map=account_map)
+        assert importer.date(str(csv_file)) is None
+
+
+class TestFilenameMethod:
+    """Tests for the filename() method."""
+
+    def test_filename_returns_clean_name(self, sample_csv_path: str, account_map: dict[str, str]) -> None:
+        """Test that filename() returns a clean filename."""
+        importer = ZenMoneyImporter(account_map=account_map)
+        filename = importer.filename(sample_csv_path)
+        assert filename is not None
+        assert filename.endswith(".csv")
+        assert "zenmoney" in filename.lower()
+
+    def test_filename_includes_date_range(self, sample_csv_path: str, account_map: dict[str, str]) -> None:
+        """Test that filename includes the date range of transactions."""
+        importer = ZenMoneyImporter(account_map=account_map)
+        filename = importer.filename(sample_csv_path)
+        assert filename is not None
+        # Should contain dates in some form
+        assert "2025" in filename
+
+
+class TestMetadata:
+    """Tests for transaction metadata."""
+
+    def test_line_numbers_in_metadata(self, sample_csv_path: str, account_map: dict[str, str]) -> None:
+        """Test that transactions have correct line numbers in metadata."""
+        importer = ZenMoneyImporter(account_map=account_map)
+        entries = importer.extract(sample_csv_path, existing=[])
+        transactions = [e for e in entries if isinstance(e, Transaction)]
+
+        # Line numbers should be sequential starting from 2 (after header)
+        line_numbers = [t.meta.get("lineno") for t in transactions]
+        assert all(ln is not None and ln >= 2 for ln in line_numbers)
+        # First transaction should be on line 2
+        assert 2 in line_numbers
+
+    def test_timestamps_in_metadata(self, sample_csv_path: str, account_map: dict[str, str]) -> None:
+        """Test that ZenMoney timestamps are preserved in metadata."""
+        importer = ZenMoneyImporter(account_map=account_map)
+        entries = importer.extract(sample_csv_path, existing=[])
+        transactions = [e for e in entries if isinstance(e, Transaction)]
+
+        # Check first transaction has timestamp metadata
+        first_txn = transactions[0]
+        assert "zenmoney_created" in first_txn.meta
+        assert "zenmoney_changed" in first_txn.meta
+
+    def test_category_in_metadata(self, sample_csv_path: str, account_map: dict[str, str]) -> None:
+        """Test that original ZenMoney category is preserved in metadata."""
+        importer = ZenMoneyImporter(account_map=account_map)
+        entries = importer.extract(sample_csv_path, existing=[])
+        transactions = [e for e in entries if isinstance(e, Transaction)]
+
+        # Find a transaction with a category
+        categorized_txn = next(
+            (t for t in transactions if t.meta.get("zenmoney_category")),
+            None,
+        )
+        assert categorized_txn is not None
+
+
+class TestFlagConfiguration:
+    """Tests for transaction flag configuration."""
+
+    def test_default_flag_is_cleared(self, sample_csv_path: str, account_map: dict[str, str]) -> None:
+        """Test that default flag is * (cleared)."""
+        importer = ZenMoneyImporter(account_map=account_map)
+        entries = importer.extract(sample_csv_path, existing=[])
+        transactions = [e for e in entries if isinstance(e, Transaction)]
+
+        assert all(t.flag == "*" for t in transactions)
+
+    def test_custom_flag(self, sample_csv_path: str, account_map: dict[str, str]) -> None:
+        """Test that custom flag can be configured."""
+        importer = ZenMoneyImporter(account_map=account_map, flag="!")
+        entries = importer.extract(sample_csv_path, existing=[])
+        transactions = [e for e in entries if isinstance(e, Transaction)]
+
+        assert all(t.flag == "!" for t in transactions)
