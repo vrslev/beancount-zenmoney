@@ -1,4 +1,4 @@
-.PHONY: install test lint format format-check typecheck check build clean
+.PHONY: install test lint format format-check typecheck check build clean release
 
 install:
 	uv sync --dev
@@ -27,3 +27,7 @@ build:
 clean:
 	rm -rf dist/ build/ *.egg-info/ .pytest_cache/ .ruff_cache/ .coverage htmlcov/
 	find . -type d -name __pycache__ -exec rm -rf {} +
+
+release:
+	@if [ -z "$(VERSION)" ]; then echo "Usage: make release VERSION=X.Y.Z"; exit 1; fi
+	./scripts/release.sh $(VERSION)

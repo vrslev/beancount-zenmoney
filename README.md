@@ -189,17 +189,32 @@ cd beancount-zenmoney
 make install
 ```
 
+### Releasing
+
+The package is automatically published to PyPI when a version tag is pushed:
+
+```bash
+make release VERSION=0.2.0
+```
+
+This script will:
+- Run all checks (lint, format, typecheck, tests)
+- Validate the version format and ensure the tag doesn't exist
+- Update version in `pyproject.toml` and `__init__.py`
+- Commit, tag, and push to remote
+
 ### Available Commands
 
 ```bash
-make install    # Install dependencies
-make test       # Run tests
-make lint       # Run linter
-make format     # Format code (ruff check --fix + ruff format)
-make typecheck  # Run type checker
-make check      # Run all checks (lint, format-check, typecheck, test)
-make build      # Build package
-make clean      # Clean build artifacts
+make install              # Install dependencies
+make test                 # Run tests
+make lint                 # Run linter
+make format               # Format code (ruff check --fix + ruff format)
+make typecheck            # Run type checker
+make check                # Run all checks (lint, format-check, typecheck, test)
+make build                # Build package
+make clean                # Clean build artifacts
+make release VERSION=X.Y.Z  # Create and push a release
 ```
 
 ### Running Tests
