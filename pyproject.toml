@@ -46,9 +46,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/beancount-zenmoney"
-Repository = "https://github.com/yourusername/beancount-zenmoney"
-Issues = "https://github.com/yourusername/beancount-zenmoney/issues"
+Homepage = "https://github.com/MrLokans/beancount-zenmoney"
+Repository = "https://github.com/MrLokans/beancount-zenmoney"
+Issues = "https://github.com/MrLokans/beancount-zenmoney/issues"
 
 [tool.ruff]
 target-version = "py310"
@@ -71,7 +71,7 @@ python-version = "3.10"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-v --cov=beancount_zenmoney --cov-report=term-missing"
+addopts = "-v --cov=beancount_zenmoney --cov-report=term-missing --cov-report=xml"
 
 [tool.coverage.run]
 source = ["src/beancount_zenmoney"]

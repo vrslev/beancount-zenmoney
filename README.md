@@ -1,5 +1,11 @@
 # beancount-zenmoney
 
+[![PyPI version](https://img.shields.io/pypi/v/beancount-zenmoney.svg)](https://pypi.org/project/beancount-zenmoney/)
+[![Python versions](https://img.shields.io/pypi/pyversions/beancount-zenmoney.svg)](https://pypi.org/project/beancount-zenmoney/)
+[![License](https://img.shields.io/pypi/l/beancount-zenmoney.svg)](https://github.com/MrLokans/beancount-zenmoney/blob/main/LICENSE)
+[![CI](https://github.com/MrLokans/beancount-zenmoney/actions/workflows/ci.yml/badge.svg)](https://github.com/MrLokans/beancount-zenmoney/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/MrLokans/beancount-zenmoney/graph/badge.svg)](https://codecov.io/gh/MrLokans/beancount-zenmoney)
+
 A [Beancount](https://github.com/beancount/beancount) importer for [Zenmoney](https://zenmoney.ru/) CSV exports, built on [beangulp](https://github.com/beancount/beangulp).
 
 ## Installation
@@ -20,33 +26,21 @@ uv add beancount-zenmoney
 - Beancount 3.x
 - beangulp
 
-## Usage
+## Quick Start
 
-### Basic Setup
-
-Create an `import.py` file for beangulp:
+Create an `import.py` file for beangulp (see [examples/import.py](examples/import.py) for a complete example):
 
 ```python
 from beancount_zenmoney import ZenMoneyImporter
 
-# Map your Zenmoney account names to Beancount accounts
 account_map = {
     "PKO - PLN": "Assets:Bank:PKO:PLN",
-    "PKO - EUR": "Assets:Bank:PKO:EUR",
-    "Cash - PLN": "Assets:Cash:PLN",
     "Revolut - EUR": "Assets:Bank:Revolut:EUR",
 }
 
-# Map Zenmoney categories to Beancount expense/income accounts
 category_map = {
     "Salary": "Income:Salary",
-    "Food": "Expenses:Food",
     "Food / Groceries": "Expenses:Food:Groceries",
-    "Food / Restaurants": "Expenses:Food:Restaurants",
-    "Transport": "Expenses:Transport",
-    "Transport / Taxi": "Expenses:Transport:Taxi",
-    "Utilities": "Expenses:Housing:Utilities",
-    "Entertainment": "Expenses:Entertainment",
 }
 
 importers = [
@@ -57,20 +51,13 @@ importers = [
 ]
 ```
 
-### Running the Importer
+Run with beangulp:
 
 ```bash
-# Extract transactions from a Zenmoney CSV export
 beangulp extract -e ledger.beancount import.py zenmoney_export.csv
-
-# Identify which importer matches a file
-beangulp identify import.py zenmoney_export.csv
-
-# Archive imported files
-beangulp archive -e ledger.beancount import.py zenmoney_export.csv
 ```
 
-### Configuration Options
+## Configuration Options
 
 ```python
 ZenMoneyImporter(
@@ -95,42 +82,64 @@ ZenMoneyImporter(
 
     # Optional: Default asset account for unknown Zenmoney accounts
     default_account="Assets:Unknown",
+
+    # Optional: Transaction flag - "*" for cleared (default), "!" for pending
+    flag="!",
 )
 ```
 
-### Transaction Types
+## Features
 
-The importer handles different transaction types:
+### Transaction Types
 
 | Zenmoney Transaction | Beancount Result |
 |---------------------|------------------|
 | Expense (outcome only) | Debit from asset, credit to expense |
 | Income (income only) | Credit to asset, debit from income |
 | Transfer (same currency) | Debit from source, credit to destination |
-| Currency exchange | Debit in one currency, credit in another |
+| Currency exchange | Debit in one currency, credit in another with price |
 | Refund | Credit to asset, debit from expense |
 
-### Example Output
+### Currency Exchange with Price
 
-A Zenmoney expense transaction:
+Currency exchanges automatically include price annotations for proper cost tracking:
+
+```beancount
+2025-12-12 * "" "FX EXCHANGE EUR/PLN 4.25"
+  Assets:Bank:PKO:PLN   -4250.00 PLN
+  Assets:Bank:PKO:EUR    1000.00 EUR @ 4.25 PLN
 ```
+
+### Metadata Preservation
+
+Each transaction includes metadata from ZenMoney:
+
+```beancount
 2025-12-14 * "SuperMarket" ""
-  Assets:Bank:PKO:PLN  -1250.00 PLN
-  Expenses:Food:Groceries   1250.00 PLN
+  zenmoney_created: "2025-12-14 10:30:00"
+  zenmoney_changed: "2025-12-14 11:00:00"
+  zenmoney_category: "Food / Groceries"
+  Assets:Bank:PKO:PLN       -125.50 PLN
+  Expenses:Food:Groceries    125.50 PLN
 ```
 
-A currency exchange:
-```
-2025-12-12 * "" "FX EXCHANGE EUR/PLN"
-  Assets:Bank:PKO:PLN  -42500.00 PLN
-  Assets:Bank:PKO:EUR    500.00 EUR
+### File Archiving Support
+
+The importer implements `date()` and `filename()` methods for beangulp archiving:
+
+```bash
+# Archive files with automatic date-based naming
+beangulp archive -e ledger.beancount import.py zenmoney_export.csv
+# Creates: documents/Assets/Import/ZenMoney/2025-11-29-to-2025-12-15.zenmoney.csv
 ```
 
-An internal transfer:
-```
-2025-12-11 * "" ""
-  Assets:Bank:PKO:PLN  -20000.00 PLN
-  Assets:Cash:PLN           20000.00 PLN
+### Logging
+
+Skipped rows are logged as warnings for troubleshooting:
+
+```python
+import logging
+logging.basicConfig(level=logging.WARNING)
 ```
 
 ## Exporting from Zenmoney
@@ -145,13 +154,37 @@ The CSV file should have semicolon-separated columns including:
 - `date`, `categoryName`, `payee`, `comment`
 - `outcomeAccountName`, `outcome`, `outcomeCurrencyShortTitle`
 - `incomeAccountName`, `income`, `incomeCurrencyShortTitle`
+- `createdDate`, `changedDate`
+
+## Example Output
+
+Expense transaction:
+```beancount
+2025-12-14 * "SuperMarket" ""
+  Assets:Bank:PKO:PLN       -125.50 PLN
+  Expenses:Food:Groceries    125.50 PLN
+```
+
+Internal transfer:
+```beancount
+2025-12-11 * "" ""
+  Assets:Bank:PKO:PLN       -2000.00 PLN
+  Assets:Cash:PLN            2000.00 PLN
+```
+
+Income transaction:
+```beancount
+2025-12-15 * "ACME CORP" "DECEMBER SALARY"
+  Assets:Bank:PKO:PLN    15000.00 PLN
+  Income:Salary         -15000.00 PLN
+```
 
 ## Development
 
 ### Setup
 
 ```bash
-git clone https://github.com/yourusername/beancount-zenmoney.git
+git clone https://github.com/MrLokans/beancount-zenmoney.git
 cd beancount-zenmoney
 make install
 ```
